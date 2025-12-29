@@ -21,11 +21,11 @@ public class Main {
 
         ICommandService commandService = new TerminalCommandService();
         ITransactionService transactionService;
+        PostgreTransactionRepository repository;
 
         try {
-            transactionService = new DefaultTransactionService(
-                    new PostgreTransactionRepository(dbUrl, dbUser, dbPassword)
-            );
+            repository = new PostgreTransactionRepository(dbUrl, dbUser, dbPassword);
+            transactionService = new DefaultTransactionService(repository);
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Failed to connect to the database. Exiting.");
@@ -34,7 +34,7 @@ public class Main {
 
         commandService.registerCommand(new CreateTransactionCommand(transactionService));
         commandService.registerCommand(new DeleteTransactionCommand(transactionService));
-        commandService.registerCommand(new ListTransactionsCommand(transactionService));
+        commandService.registerCommand(new ListTransactionsCommand(transactionService, repository.getConnection()));
         commandService.registerCommand(new ShowBalanceCommand(transactionService));
 
         if (commandService instanceof TerminalCommandService service) {
@@ -42,4 +42,3 @@ public class Main {
         }
     }
 }
-

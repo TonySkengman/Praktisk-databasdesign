@@ -4,30 +4,25 @@ import me.code.models.Transaction;
 import me.code.models.TransactionType;
 import me.code.services.ITransactionService;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.time.LocalDate;
-import java.time.temporal.IsoFields;
 import java.time.temporal.WeekFields;
-import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
+import java.util.UUID;
 
 public class ListTransactionsCommand extends Command {
+    private Connection connection;
 
-    public ListTransactionsCommand(ITransactionService transactionService) {
+    public ListTransactionsCommand(ITransactionService transactionService, Connection connection) {
         super("list-transactions", "List all saved transactions", transactionService);
+        this.connection = connection;
     }
 
     @Override
     public void execute() {
-        List<Transaction> transactions;
-        try {
-            transactions = transactionService.getTransactions().toList();
-        } catch (Exception exception) {
-            exception.printStackTrace();
-            System.out.println("Something went wrong!");
-            return;
-        }
-
         Scanner scanner = new Scanner(System.in);
         TransactionType type = null;
         boolean showAll = false;
@@ -122,98 +117,198 @@ public class ListTransactionsCommand extends Command {
                 return;
         }
 
-        switch (period) {
-            case "overall":
-                if (transactions.isEmpty()) {
-                    System.out.println("No transactions recorded yet.");
-                    return;
-                }
-
-                System.out.println("\n--- Showing all transactions ---");
-                for (Transaction t : transactions) {
-                    if (!showAll && t.getType() != type) continue;
-                    System.out.println(t);
-                }
-                break;
-
-            case "yearly":
-                boolean foundYear = false;
-                for (Transaction t : transactions) {
-                    if (!showAll && t.getType() != type) continue;
-                    if (t.getDate().getYear() == year) {
-                        System.out.println(t);
-                        foundYear = true;
-                    }
-                }
-                if (!foundYear)
-                    System.out.println("No transactions found for " + year + ".");
-                break;
-
-            case "monthly":
-                boolean foundMonth = false;
-                for (Transaction t : transactions) {
-                    if (!showAll && t.getType() != type) continue;
-                    if (t.getDate().getYear() == year && t.getDate().getMonthValue() == month) {
-                        System.out.println(t);
-                        foundMonth = true;
-                    }
-                }
-                if (!foundMonth)
-                    System.out.println("No transactions found for " + year + "-" + month + ".");
-                break;
-
-            case "weekly":
-                WeekFields weekFields = WeekFields.of(Locale.getDefault());
-                boolean anyWeekTransaction = false;
-
-                for (int w = 1; w <= 53; w++) {
-                    boolean weekHasTransaction = false;
-
-                    LocalDate weekStart;
-                    LocalDate weekEnd;
-                    try {
-                        weekStart = LocalDate.of(weekYear, 1, 1)
-                                .with(weekFields.weekOfYear(), w)
-                                .with(weekFields.dayOfWeek(), 1);
-                        weekEnd = weekStart.plusDays(6);
-                    } catch (java.time.DateTimeException e) {
-                        continue;
-                    }
-
-                    for (Transaction t2 : transactions) {
-                        if (!showAll && t2.getType() != type) continue;
-
-                        LocalDate tDate = t2.getDate();
-                        int tWeek = tDate.get(weekFields.weekOfYear());
-                        int tYear = tDate.get(IsoFields.WEEK_BASED_YEAR);
-
-                        if (tWeek == w && tYear == weekYear) {
-                            if (!weekHasTransaction) {
-                                System.out.printf("\nWeek %d (%s - %s):%n", w, weekStart, weekEnd);
-                                weekHasTransaction = true;
-                                anyWeekTransaction = true;
-                            }
-                            System.out.println("  " + t2);
-                        }
-                    }
-                }
-
-                if (!anyWeekTransaction)
-                    System.out.println("No transactions found for year " + weekYear + ".");
-                break;
-
-            case "daily":
-                boolean foundDay = false;
-                for (Transaction t : transactions) {
-                    if (!showAll && t.getType() != type) continue;
-                    if (t.getDate().equals(date)) {
-                        System.out.println(t);
-                        foundDay = true;
-                    }
-                }
-                if (!foundDay)
-                    System.out.println("No transactions found for " + date + ".");
-                break;
+        try {
+            switch (period) {
+                case "overall":
+                    executeOverallQuery(showAll, type);
+                    break;
+                case "yearly":
+                    executeYearlyQuery(year, showAll, type);
+                    break;
+                case "monthly":
+                    executeMonthlyQuery(year, month, showAll, type);
+                    break;
+                case "weekly":
+                    executeWeeklyQuery(weekYear, showAll, type);
+                    break;
+                case "daily":
+                    executeDailyQuery(date, showAll, type);
+                    break;
+            }
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            System.out.println("Something went wrong!");
         }
+    }
+
+    private void executeOverallQuery(boolean showAll, TransactionType type) throws Exception {
+        String sql = "SELECT * FROM transactions";
+        if (!showAll) {
+            sql += " WHERE type = ?";
+        }
+        sql += " ORDER BY date";
+
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        if (!showAll) {
+            stmt.setString(1, type.toString());
+        }
+
+        ResultSet rs = stmt.executeQuery();
+        boolean hasResults = false;
+
+        System.out.println("\n--- Showing all transactions ---");
+        while (rs.next()) {
+            hasResults = true;
+            printTransaction(rs);
+        }
+
+        if (!hasResults) {
+            System.out.println("No transactions recorded yet.");
+        }
+
+        rs.close();
+        stmt.close();
+    }
+
+    private void executeYearlyQuery(int year, boolean showAll, TransactionType type) throws Exception {
+        String sql = "SELECT * FROM transactions WHERE EXTRACT(YEAR FROM date) = ?";
+        if (!showAll) {
+            sql += " AND type = ?";
+        }
+        sql += " ORDER BY date";
+
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        stmt.setInt(1, year);
+        if (!showAll) {
+            stmt.setString(2, type.toString());
+        }
+
+        ResultSet rs = stmt.executeQuery();
+        boolean hasResults = false;
+
+        while (rs.next()) {
+            hasResults = true;
+            printTransaction(rs);
+        }
+
+        if (!hasResults) {
+            System.out.println("No transactions found for " + year + ".");
+        }
+
+        rs.close();
+        stmt.close();
+    }
+
+    private void executeMonthlyQuery(int year, int month, boolean showAll, TransactionType type) throws Exception {
+        String sql = "SELECT * FROM transactions WHERE EXTRACT(YEAR FROM date) = ? AND EXTRACT(MONTH FROM date) = ?";
+        if (!showAll) {
+            sql += " AND type = ?";
+        }
+        sql += " ORDER BY date";
+
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        stmt.setInt(1, year);
+        stmt.setInt(2, month);
+        if (!showAll) {
+            stmt.setString(3, type.toString());
+        }
+
+        ResultSet rs = stmt.executeQuery();
+        boolean hasResults = false;
+
+        while (rs.next()) {
+            hasResults = true;
+            printTransaction(rs);
+        }
+
+        if (!hasResults) {
+            System.out.println("No transactions found for " + year + "-" + month + ".");
+        }
+
+        rs.close();
+        stmt.close();
+    }
+
+    private void executeWeeklyQuery(int weekYear, boolean showAll, TransactionType type) throws Exception {
+        String sql = "SELECT *, EXTRACT(WEEK FROM date) as week_num, " +
+                "date_trunc('week', date)::date as week_start " +
+                "FROM transactions " +
+                "WHERE EXTRACT(YEAR FROM date) = ?";
+        if (!showAll) {
+            sql += " AND type = ?";
+        }
+        sql += " ORDER BY week_num, date";
+
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        stmt.setInt(1, weekYear);
+        if (!showAll) {
+            stmt.setString(2, type.toString());
+        }
+
+        ResultSet rs = stmt.executeQuery();
+        boolean anyWeekTransaction = false;
+        int currentWeek = -1;
+
+        while (rs.next()) {
+            int weekNum = rs.getInt("week_num");
+            LocalDate weekStart = rs.getDate("week_start").toLocalDate();
+            LocalDate weekEnd = weekStart.plusDays(6);
+
+            if (weekNum != currentWeek) {
+                System.out.printf("\nWeek %d (%s - %s):%n", weekNum, weekStart, weekEnd);
+                currentWeek = weekNum;
+                anyWeekTransaction = true;
+            }
+
+            System.out.print("  ");
+            printTransaction(rs);
+        }
+
+        if (!anyWeekTransaction) {
+            System.out.println("No transactions found for year " + weekYear + ".");
+        }
+
+        rs.close();
+        stmt.close();
+    }
+
+    private void executeDailyQuery(LocalDate date, boolean showAll, TransactionType type) throws Exception {
+        String sql = "SELECT * FROM transactions WHERE date = ?";
+        if (!showAll) {
+            sql += " AND type = ?";
+        }
+        sql += " ORDER BY date";
+
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        stmt.setDate(1, java.sql.Date.valueOf(date));
+        if (!showAll) {
+            stmt.setString(2, type.toString());
+        }
+
+        ResultSet rs = stmt.executeQuery();
+        boolean hasResults = false;
+
+        while (rs.next()) {
+            hasResults = true;
+            printTransaction(rs);
+        }
+
+        if (!hasResults) {
+            System.out.println("No transactions found for " + date + ".");
+        }
+
+        rs.close();
+        stmt.close();
+    }
+
+    private void printTransaction(ResultSet rs) throws Exception {
+        UUID id = UUID.fromString(rs.getString("id"));
+        String typeStr = rs.getString("type");
+        TransactionType type = TransactionType.valueOf(typeStr);
+        double amount = rs.getDouble("amount");
+        LocalDate date = rs.getDate("date").toLocalDate();
+
+        Transaction transaction = new Transaction(id, amount, date, type);
+        System.out.println(transaction);
     }
 }

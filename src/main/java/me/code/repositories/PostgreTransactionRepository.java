@@ -114,4 +114,9 @@ public class PostgreTransactionRepository implements ITransactionRepository {
             statement.executeUpdate();
         }
     }
+
+    public Connection getConnection() {
+        return this.connection;
+    }
 }
+
