@@ -2,14 +2,13 @@ package me.code.commands;
 
 import me.code.models.Transaction;
 import me.code.models.TransactionType;
+import me.code.services.AuthService;
 import me.code.services.ITransactionService;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
-import java.time.temporal.WeekFields;
-import java.util.Locale;
 import java.util.Scanner;
 import java.util.UUID;
 
@@ -142,15 +141,16 @@ public class ListTransactionsCommand extends Command {
     }
 
     private void executeOverallQuery(boolean showAll, TransactionType type) throws Exception {
-        String sql = "SELECT * FROM transactions";
+        String sql = "SELECT * FROM transactions WHERE user_id = ?";
         if (!showAll) {
-            sql += " WHERE type = ?";
+            sql += " AND type = ?";
         }
         sql += " ORDER BY date";
 
         PreparedStatement stmt = connection.prepareStatement(sql);
+        stmt.setObject(1, AuthService.getUserId());
         if (!showAll) {
-            stmt.setString(1, type.toString());
+            stmt.setString(2, type.toString());
         }
 
         ResultSet rs = stmt.executeQuery();
@@ -171,16 +171,17 @@ public class ListTransactionsCommand extends Command {
     }
 
     private void executeYearlyQuery(int year, boolean showAll, TransactionType type) throws Exception {
-        String sql = "SELECT * FROM transactions WHERE EXTRACT(YEAR FROM date) = ?";
+        String sql = "SELECT * FROM transactions WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?";
         if (!showAll) {
             sql += " AND type = ?";
         }
         sql += " ORDER BY date";
 
         PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setInt(1, year);
+        stmt.setObject(1, AuthService.getUserId());
+        stmt.setInt(2, year);
         if (!showAll) {
-            stmt.setString(2, type.toString());
+            stmt.setString(3, type.toString());
         }
 
         ResultSet rs = stmt.executeQuery();
@@ -200,17 +201,18 @@ public class ListTransactionsCommand extends Command {
     }
 
     private void executeMonthlyQuery(int year, int month, boolean showAll, TransactionType type) throws Exception {
-        String sql = "SELECT * FROM transactions WHERE EXTRACT(YEAR FROM date) = ? AND EXTRACT(MONTH FROM date) = ?";
+        String sql = "SELECT * FROM transactions WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ? AND EXTRACT(MONTH FROM date) = ?";
         if (!showAll) {
             sql += " AND type = ?";
         }
         sql += " ORDER BY date";
 
         PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setInt(1, year);
-        stmt.setInt(2, month);
+        stmt.setObject(1, AuthService.getUserId());
+        stmt.setInt(2, year);
+        stmt.setInt(3, month);
         if (!showAll) {
-            stmt.setString(3, type.toString());
+            stmt.setString(4, type.toString());
         }
 
         ResultSet rs = stmt.executeQuery();
@@ -233,16 +235,17 @@ public class ListTransactionsCommand extends Command {
         String sql = "SELECT *, EXTRACT(WEEK FROM date) as week_num, " +
                 "date_trunc('week', date)::date as week_start " +
                 "FROM transactions " +
-                "WHERE EXTRACT(YEAR FROM date) = ?";
+                "WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?";
         if (!showAll) {
             sql += " AND type = ?";
         }
         sql += " ORDER BY week_num, date";
 
         PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setInt(1, weekYear);
+        stmt.setObject(1, AuthService.getUserId());
+        stmt.setInt(2, weekYear);
         if (!showAll) {
-            stmt.setString(2, type.toString());
+            stmt.setString(3, type.toString());
         }
 
         ResultSet rs = stmt.executeQuery();
@@ -273,16 +276,17 @@ public class ListTransactionsCommand extends Command {
     }
 
     private void executeDailyQuery(LocalDate date, boolean showAll, TransactionType type) throws Exception {
-        String sql = "SELECT * FROM transactions WHERE date = ?";
+        String sql = "SELECT * FROM transactions WHERE user_id = ? AND date = ?";
         if (!showAll) {
             sql += " AND type = ?";
         }
         sql += " ORDER BY date";
 
         PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setDate(1, java.sql.Date.valueOf(date));
+        stmt.setObject(1, AuthService.getUserId());
+        stmt.setDate(2, java.sql.Date.valueOf(date));
         if (!showAll) {
-            stmt.setString(2, type.toString());
+            stmt.setString(3, type.toString());
         }
 
         ResultSet rs = stmt.executeQuery();
@@ -303,12 +307,13 @@ public class ListTransactionsCommand extends Command {
 
     private void printTransaction(ResultSet rs) throws Exception {
         UUID id = UUID.fromString(rs.getString("id"));
+        UUID userId = UUID.fromString(rs.getString("user_id"));
         String typeStr = rs.getString("type");
         TransactionType type = TransactionType.valueOf(typeStr);
         double amount = rs.getDouble("amount");
         LocalDate date = rs.getDate("date").toLocalDate();
 
-        Transaction transaction = new Transaction(id, amount, date, type);
+        Transaction transaction = new Transaction(id, userId, amount, date, type);
         System.out.println(transaction);
     }
 }

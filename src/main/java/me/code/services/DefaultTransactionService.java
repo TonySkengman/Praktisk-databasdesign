@@ -2,14 +2,13 @@ package me.code.services;
 
 import me.code.models.Transaction;
 import me.code.models.TransactionType;
+import me.code.models.UserTransactionStats;
 import me.code.repositories.ITransactionRepository;
 
 import java.util.*;
 import java.util.stream.Stream;
 
-
 public class DefaultTransactionService implements ITransactionService {
-
 
     private final ITransactionRepository transactionRepository;
 
@@ -30,31 +29,39 @@ public class DefaultTransactionService implements ITransactionService {
     }
 
     @Override
-    public Transaction updateTypeById(UUID transactionId, TransactionType type) throws Exception {
-        Transaction transaction = getTransactionById(transactionId);
-        if (transaction == null) {
-            return null;
-        } else {
-            transaction.setTransactionType(type);      // Uppdatera status
-            transactionRepository.save(transaction);   // Spara tillbaka
-            return transaction;
-        }
-    }
-
-    @Override
     public Transaction getTransactionById(UUID id) throws Exception {
         return transactionRepository.findById(id);
     }
 
     @Override
     public Stream<Transaction> getTransactions() throws Exception {
-        return transactionRepository.findAll().stream();
+        UUID userId = AuthService.getUserId();
+        if (userId == null) {
+            return Stream.empty();
+        }
+        return transactionRepository.findByUserId(userId).stream();
     }
 
     @Override
     public double calculateBalance() throws Exception {
-        return transactionRepository.findAll().stream()
-                .mapToDouble(Transaction::getAmount)
-                .sum();
+        UUID userId = AuthService.getUserId();
+        if (userId == null) {
+            return 0.0;
+        }
+        return transactionRepository.getBalanceForUser(userId);
+    }
+
+    @Override
+    public String getCurrentUsername() throws Exception {
+        UUID userId = AuthService.getUserId();
+        if (userId == null) {
+            return "Not logged in";
+        }
+        return transactionRepository.getUsernameById(userId);
+    }
+
+    @Override
+    public UserTransactionStats getUserTransactionStats(UUID userId) throws Exception {
+        return transactionRepository.getUserTransactionStats(userId);
     }
 }

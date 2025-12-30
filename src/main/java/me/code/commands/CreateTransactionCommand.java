@@ -2,6 +2,7 @@ package me.code.commands;
 
 import me.code.models.Transaction;
 import me.code.models.TransactionType;
+import me.code.services.AuthService; // ADD THIS
 import me.code.services.ITransactionService;
 
 import java.time.LocalDate;
@@ -16,7 +17,6 @@ public class CreateTransactionCommand extends Command {
 
     @Override
     public void execute() {
-
         Scanner scanner = new Scanner(System.in);
         TransactionType type = null;
         while (type == null) {
@@ -64,7 +64,7 @@ public class CreateTransactionCommand extends Command {
             }
         }
 
-        Transaction transaction = new Transaction(amount, date, type);
+        Transaction transaction = new Transaction(AuthService.getUserId(), amount, date, type); // ADD AuthService.getUserId()
         try {
             transactionService.createTransaction(transaction);
             System.out.println("Transaction amount: " + transaction.getFormattedAmount() + " has been saved!");

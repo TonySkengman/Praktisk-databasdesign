@@ -5,24 +5,26 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 public class Transaction {
-
     public static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     public static final String AMOUNT_FORMAT = "%.2f";
 
     private final UUID id;
+    private final UUID userId;
     private double amount;
     private LocalDate date;
     private TransactionType type;
 
-    public Transaction(double amount, LocalDate date, TransactionType type) {
+    public Transaction(UUID userId, double amount, LocalDate date, TransactionType type) {
         this.id = UUID.randomUUID();
+        this.userId = userId;
         this.amount = amount;
         this.date = date;
         this.type = type;
     }
 
-    public Transaction(UUID id, double amount, LocalDate date, TransactionType type) {
+    public Transaction(UUID id, UUID userId, double amount, LocalDate date, TransactionType type) {
         this.id = id;
+        this.userId = userId;
         this.amount = amount;
         this.date = date;
         this.type = type;
@@ -50,6 +52,10 @@ public class Transaction {
 
     public TransactionType getType() {
         return type;
+    }
+
+    public UUID getUserId() {
+        return userId;
     }
 
     public void setTransactionType(TransactionType type) {

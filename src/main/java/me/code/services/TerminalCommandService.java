@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
-
 public class TerminalCommandService implements ICommandService {
 
     private final List<Command> commands = new ArrayList<>();
+    private final List<String> publicCommands = List.of("login", "create-user", "exit");
 
     public void start() {
         System.out.println("=== PERSONAL FINANCE ===");
@@ -45,9 +45,12 @@ public class TerminalCommandService implements ICommandService {
         this.commands.add(command);
     }
 
-
     @Override
     public void executeCommand(String commandInput) {
+        if (!publicCommands.contains(commandInput.toLowerCase()) && AuthService.getUserId() == null) {
+            System.out.println("You must be logged in to use this command. Use 'login' first.");
+            return;
+        }
 
         for (Command command : commands) {
             if (command.getName().equalsIgnoreCase(commandInput)) {

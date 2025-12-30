@@ -2,6 +2,7 @@ package me.code.services;
 
 import me.code.models.Transaction;
 import me.code.models.TransactionType;
+import me.code.models.UserTransactionStats;
 
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -12,7 +13,7 @@ public interface ITransactionService {
 
     Transaction deleteTransactionById(UUID id) throws Exception;
 
-    Transaction updateTypeById(UUID transactionID, TransactionType status) throws Exception;
+    String getCurrentUsername() throws Exception;
 
     Transaction getTransactionById(UUID id) throws Exception;
 
@@ -20,4 +21,5 @@ public interface ITransactionService {
 
     double calculateBalance() throws Exception;
 
+    UserTransactionStats getUserTransactionStats(UUID userId) throws Exception;
 }
