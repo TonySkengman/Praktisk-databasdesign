@@ -15,7 +15,7 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     private final Connection connection;
 
     public PostgreTransactionRepository(String url, String user, String password) throws SQLException {
-        connection = DriverManager.getConnection(url, user, password);
+        this.connection = DriverManager.getConnection(url, user, password);
 
         try (Statement statement = connection.createStatement()) {
             statement.execute("""
@@ -24,7 +24,11 @@ public class PostgreTransactionRepository implements ITransactionRepository {
                     user_id UUID NOT NULL,
                     amount DOUBLE PRECISION NOT NULL,
                     date DATE NOT NULL,
-                    type TEXT NOT NULL
+                    type TEXT NOT NULL,
+                    CONSTRAINT fk_transactions_user
+                        FOREIGN KEY (user_id)
+                        REFERENCES users(id)
+                        ON DELETE CASCADE
                 );
             """);
         }
@@ -34,21 +38,22 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     public Transaction findById(UUID transactionId) throws Exception {
         String sql = "SELECT * FROM transactions WHERE id = ?";
 
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, transactionId);
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, transactionId);
 
-            ResultSet set = statement.executeQuery();
-            if (!set.next()) {
-                return null;
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+
+                UUID id = rs.getObject("id", UUID.class);
+                UUID userId = rs.getObject("user_id", UUID.class);
+                double amount = rs.getDouble("amount");
+                LocalDate date = rs.getDate("date").toLocalDate();
+                TransactionType type = TransactionType.valueOf(rs.getString("type"));
+
+                return new Transaction(id, userId, amount, date, type);
             }
-
-            UUID id = set.getObject("id", UUID.class);
-            UUID userId = set.getObject("user_id", UUID.class);
-            double amount = set.getDouble("amount");
-            LocalDate date = set.getDate("date").toLocalDate();
-            TransactionType type = TransactionType.valueOf(set.getString("type"));
-
-            return new Transaction(id, userId, amount, date, type);
         }
     }
 
@@ -56,15 +61,17 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     public List<Transaction> findAll() throws Exception {
         List<Transaction> transactions = new ArrayList<>();
 
-        try (Statement statement = connection.createStatement()) {
-            ResultSet set = statement.executeQuery("SELECT * FROM transactions");
+        String sql = "SELECT * FROM transactions";
 
-            while (set.next()) {
-                UUID id = set.getObject("id", UUID.class);
-                UUID userId = set.getObject("user_id", UUID.class);
-                double amount = set.getDouble("amount");
-                LocalDate date = set.getDate("date").toLocalDate();
-                TransactionType type = TransactionType.valueOf(set.getString("type"));
+        try (PreparedStatement stmt = connection.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+
+            while (rs.next()) {
+                UUID id = rs.getObject("id", UUID.class);
+                UUID userId = rs.getObject("user_id", UUID.class);
+                double amount = rs.getDouble("amount");
+                LocalDate date = rs.getDate("date").toLocalDate();
+                TransactionType type = TransactionType.valueOf(rs.getString("type"));
 
                 transactions.add(new Transaction(id, userId, amount, date, type));
             }
@@ -76,20 +83,22 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     @Override
     public List<Transaction> findByUserId(UUID userId) throws Exception {
         List<Transaction> transactions = new ArrayList<>();
-        String sql = "SELECT * FROM transactions WHERE user_id = ?";
 
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, userId);
-            ResultSet set = statement.executeQuery();
+        String sql = "SELECT * FROM transactions WHERE user_id = ? ORDER BY date";
 
-            while (set.next()) {
-                UUID id = set.getObject("id", UUID.class);
-                UUID txUserId = set.getObject("user_id", UUID.class);
-                double amount = set.getDouble("amount");
-                LocalDate date = set.getDate("date").toLocalDate();
-                TransactionType type = TransactionType.valueOf(set.getString("type"));
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, userId);
 
-                transactions.add(new Transaction(id, txUserId, amount, date, type));
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    UUID id = rs.getObject("id", UUID.class);
+                    UUID txUserId = rs.getObject("user_id", UUID.class);
+                    double amount = rs.getDouble("amount");
+                    LocalDate date = rs.getDate("date").toLocalDate();
+                    TransactionType type = TransactionType.valueOf(rs.getString("type"));
+
+                    transactions.add(new Transaction(id, txUserId, amount, date, type));
+                }
             }
         }
 
@@ -106,14 +115,14 @@ public class PostgreTransactionRepository implements ITransactionRepository {
                 VALUES (?, ?, ?, ?, ?)
             """;
 
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setObject(1, transaction.getId());
-                statement.setObject(2, transaction.getUserId());
-                statement.setDouble(3, transaction.getAmount());
-                statement.setDate(4, Date.valueOf(transaction.getDate()));
-                statement.setString(5, transaction.getType().name());
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setObject(1, transaction.getId());
+                stmt.setObject(2, transaction.getUserId());
+                stmt.setDouble(3, transaction.getAmount());
+                stmt.setDate(4, Date.valueOf(transaction.getDate()));
+                stmt.setString(5, transaction.getType().name());
 
-                statement.executeUpdate();
+                stmt.executeUpdate();
             }
         } else {
             String sql = """
@@ -122,13 +131,13 @@ public class PostgreTransactionRepository implements ITransactionRepository {
                 WHERE id = ?
             """;
 
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setDouble(1, transaction.getAmount());
-                statement.setDate(2, Date.valueOf(transaction.getDate()));
-                statement.setString(3, transaction.getType().name());
-                statement.setObject(4, transaction.getId());
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setDouble(1, transaction.getAmount());
+                stmt.setDate(2, Date.valueOf(transaction.getDate()));
+                stmt.setString(3, transaction.getType().name());
+                stmt.setObject(4, transaction.getId());
 
-                statement.executeUpdate();
+                stmt.executeUpdate();
             }
         }
     }
@@ -137,36 +146,40 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     public void delete(UUID transactionId) throws Exception {
         String sql = "DELETE FROM transactions WHERE id = ?";
 
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, transactionId);
-            statement.executeUpdate();
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, transactionId);
+            stmt.executeUpdate();
         }
     }
 
     @Override
     public List<String> getTransactionsWithUsername(UUID userId) throws Exception {
         String sql = """
-        SELECT t.id, t.amount, t.date, t.type, u.username
-        FROM transactions t
-        JOIN users u ON t.user_id = u.id
-        WHERE t.user_id = ?
-        ORDER BY t.date
-    """;
+            SELECT t.id, t.amount, t.date, t.type, u.username
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = ?
+            ORDER BY t.date
+        """;
 
         List<String> results = new ArrayList<>();
+
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setObject(1, userId);
-            ResultSet rs = stmt.executeQuery();
 
-            while (rs.next()) {
-                String result = String.format("User: %s | Amount: %.2f | Date: %s | Type: %s",
-                        rs.getString("username"),
-                        rs.getDouble("amount"),
-                        rs.getDate("date"),
-                        rs.getString("type"));
-                results.add(result);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    results.add(String.format(
+                            "User: %s | Amount: %.2f | Date: %s | Type: %s",
+                            rs.getString("username"),
+                            rs.getDouble("amount"),
+                            rs.getDate("date"),
+                            rs.getString("type")
+                    ));
+                }
             }
         }
+
         return results;
     }
 
@@ -174,9 +187,9 @@ public class PostgreTransactionRepository implements ITransactionRepository {
     public UserTransactionStats getUserTransactionStats(UUID userId) throws Exception {
         String sql = """
             SELECT u.username,
-                   COUNT(t.id) as transaction_count,
-                   COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) as total_income,
-                   COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) as total_expense
+                   COUNT(t.id) AS transaction_count,
+                   COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) AS total_income,
+                   COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) AS total_expense
             FROM users u
             LEFT JOIN transactions t ON u.id = t.user_id
             WHERE u.id = ?
@@ -203,16 +216,18 @@ public class PostgreTransactionRepository implements ITransactionRepository {
 
     @Override
     public double getBalanceForUser(UUID userId) throws Exception {
-        String sql = "SELECT COALESCE(SUM(amount), 0) as balance FROM transactions WHERE user_id = ?";
+        String sql = "SELECT COALESCE(SUM(amount), 0) AS balance FROM transactions WHERE user_id = ?";
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setObject(1, userId);
+
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return rs.getDouble("balance");
                 }
             }
         }
+
         return 0.0;
     }
 
@@ -222,16 +237,18 @@ public class PostgreTransactionRepository implements ITransactionRepository {
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setObject(1, userId);
+
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return rs.getString("username");
                 }
             }
         }
+
         return "Unknown";
     }
 
     public Connection getConnection() {
-        return this.connection;
+        return connection;
     }
 }

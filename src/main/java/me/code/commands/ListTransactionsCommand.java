@@ -13,7 +13,8 @@ import java.util.Scanner;
 import java.util.UUID;
 
 public class ListTransactionsCommand extends Command {
-    private Connection connection;
+
+    private final Connection connection;
 
     public ListTransactionsCommand(ITransactionService transactionService, Connection connection) {
         super("list-transactions", "List all saved transactions", transactionService);
@@ -30,290 +31,161 @@ public class ListTransactionsCommand extends Command {
             System.out.print("Enter transaction type (income/expense/all): ");
             String input = scanner.nextLine().trim().toLowerCase();
             switch (input) {
-                case "income":
-                    type = TransactionType.INCOME;
-                    break;
-                case "expense":
-                    type = TransactionType.EXPENSE;
-                    break;
-                case "all":
-                    showAll = true;
-                    break;
-                default:
-                    System.out.println("Invalid input. Please enter 'income', 'expense', or 'all'.");
+                case "income" -> type = TransactionType.INCOME;
+                case "expense" -> type = TransactionType.EXPENSE;
+                case "all" -> showAll = true;
+                default -> System.out.println("Invalid input.");
             }
         }
 
-        System.out.println("Select period: (overall/yearly/monthly/weekly/daily).");
+        System.out.println("Select period: (overall/yearly/monthly/weekly/daily)");
         String period = scanner.nextLine().trim().toLowerCase();
-
-        int year = 0, month = 0;
-        LocalDate date = null;
-        int weekYear = 0;
-
-        switch (period) {
-            case "yearly":
-                while (true) {
-                    System.out.print("Enter year: ");
-                    try {
-                        year = Integer.parseInt(scanner.nextLine().trim());
-                        break;
-                    } catch (NumberFormatException e) {
-                        System.out.println("Invalid year. Please enter a valid number.");
-                    }
-                }
-                break;
-            case "monthly":
-                while (true) {
-                    System.out.print("Enter year: ");
-                    try {
-                        year = Integer.parseInt(scanner.nextLine().trim());
-                        break;
-                    } catch (NumberFormatException e) {
-                        System.out.println("Invalid year. Please enter a valid number.");
-                    }
-                }
-                while (true) {
-                    System.out.print("Enter month (1-12): ");
-                    try {
-                        month = Integer.parseInt(scanner.nextLine().trim());
-                        if (month < 1 || month > 12) {
-                            System.out.println("Month must be between 1 and 12.");
-                            continue;
-                        }
-                        break;
-                    } catch (NumberFormatException e) {
-                        System.out.println("Invalid month. Please enter a number between 1 and 12.");
-                    }
-                }
-                break;
-            case "weekly":
-                while (true) {
-                    System.out.print("Enter year: ");
-                    try {
-                        weekYear = Integer.parseInt(scanner.nextLine().trim());
-                        break;
-                    } catch (NumberFormatException e) {
-                        System.out.println("Invalid year. Please enter a valid number.");
-                    }
-                }
-                break;
-            case "daily":
-                while (true) {
-                    System.out.print("Enter date (YYYY-MM-DD): ");
-                    try {
-                        date = LocalDate.parse(scanner.nextLine().trim());
-                        break;
-                    } catch (java.time.format.DateTimeParseException e) {
-                        System.out.println("Invalid date format. Please use YYYY-MM-DD format.");
-                    }
-                }
-                break;
-            case "overall":
-                break;
-            default:
-                System.out.println("Unknown period. Exiting.");
-                return;
-        }
 
         try {
             switch (period) {
-                case "overall":
-                    executeOverallQuery(showAll, type);
-                    break;
-                case "yearly":
-                    executeYearlyQuery(year, showAll, type);
-                    break;
-                case "monthly":
+                case "overall" -> executeOverallQuery(showAll, type);
+                case "yearly" -> {
+                    System.out.print("Enter year: ");
+                    executeYearlyQuery(Integer.parseInt(scanner.nextLine()), showAll, type);
+                }
+                case "monthly" -> {
+                    System.out.print("Enter year: ");
+                    int year = Integer.parseInt(scanner.nextLine());
+                    System.out.print("Enter month (1-12): ");
+                    int month = Integer.parseInt(scanner.nextLine());
                     executeMonthlyQuery(year, month, showAll, type);
-                    break;
-                case "weekly":
-                    executeWeeklyQuery(weekYear, showAll, type);
-                    break;
-                case "daily":
-                    executeDailyQuery(date, showAll, type);
-                    break;
+                }
+                case "weekly" -> {
+                    System.out.print("Enter year: ");
+                    executeWeeklyQuery(Integer.parseInt(scanner.nextLine()), showAll, type);
+                }
+                case "daily" -> {
+                    System.out.print("Enter date (YYYY-MM-DD): ");
+                    executeDailyQuery(LocalDate.parse(scanner.nextLine()), showAll, type);
+                }
+                default -> System.out.println("Unknown period.");
             }
-        } catch (Exception exception) {
-            exception.printStackTrace();
-            System.out.println("Something went wrong!");
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Something went wrong.");
         }
     }
 
     private void executeOverallQuery(boolean showAll, TransactionType type) throws Exception {
         String sql = "SELECT * FROM transactions WHERE user_id = ?";
-        if (!showAll) {
-            sql += " AND type = ?";
-        }
+        if (!showAll) sql += " AND type = ?";
         sql += " ORDER BY date";
 
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setObject(1, AuthService.getUserId());
-        if (!showAll) {
-            stmt.setString(2, type.toString());
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            if (!showAll) stmt.setString(2, type.name());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    printTransaction(rs);
+                }
+            }
         }
-
-        ResultSet rs = stmt.executeQuery();
-        boolean hasResults = false;
-
-        System.out.println("\n--- Showing all transactions ---");
-        while (rs.next()) {
-            hasResults = true;
-            printTransaction(rs);
-        }
-
-        if (!hasResults) {
-            System.out.println("No transactions recorded yet.");
-        }
-
-        rs.close();
-        stmt.close();
     }
 
     private void executeYearlyQuery(int year, boolean showAll, TransactionType type) throws Exception {
         String sql = "SELECT * FROM transactions WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?";
-        if (!showAll) {
-            sql += " AND type = ?";
-        }
+        if (!showAll) sql += " AND type = ?";
         sql += " ORDER BY date";
 
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setObject(1, AuthService.getUserId());
-        stmt.setInt(2, year);
-        if (!showAll) {
-            stmt.setString(3, type.toString());
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            stmt.setInt(2, year);
+            if (!showAll) stmt.setString(3, type.name());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    printTransaction(rs);
+                }
+            }
         }
-
-        ResultSet rs = stmt.executeQuery();
-        boolean hasResults = false;
-
-        while (rs.next()) {
-            hasResults = true;
-            printTransaction(rs);
-        }
-
-        if (!hasResults) {
-            System.out.println("No transactions found for " + year + ".");
-        }
-
-        rs.close();
-        stmt.close();
     }
 
     private void executeMonthlyQuery(int year, int month, boolean showAll, TransactionType type) throws Exception {
         String sql = "SELECT * FROM transactions WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ? AND EXTRACT(MONTH FROM date) = ?";
-        if (!showAll) {
-            sql += " AND type = ?";
-        }
+        if (!showAll) sql += " AND type = ?";
         sql += " ORDER BY date";
 
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setObject(1, AuthService.getUserId());
-        stmt.setInt(2, year);
-        stmt.setInt(3, month);
-        if (!showAll) {
-            stmt.setString(4, type.toString());
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            stmt.setInt(2, year);
+            stmt.setInt(3, month);
+            if (!showAll) stmt.setString(4, type.name());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    printTransaction(rs);
+                }
+            }
         }
-
-        ResultSet rs = stmt.executeQuery();
-        boolean hasResults = false;
-
-        while (rs.next()) {
-            hasResults = true;
-            printTransaction(rs);
-        }
-
-        if (!hasResults) {
-            System.out.println("No transactions found for " + year + "-" + month + ".");
-        }
-
-        rs.close();
-        stmt.close();
     }
 
-    private void executeWeeklyQuery(int weekYear, boolean showAll, TransactionType type) throws Exception {
-        String sql = "SELECT *, EXTRACT(WEEK FROM date) as week_num, " +
-                "date_trunc('week', date)::date as week_start " +
-                "FROM transactions " +
-                "WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?";
-        if (!showAll) {
-            sql += " AND type = ?";
-        }
+    private void executeWeeklyQuery(int year, boolean showAll, TransactionType type) throws Exception {
+        String sql = """
+            SELECT *,
+                   EXTRACT(WEEK FROM date) AS week_num,
+                   date_trunc('week', date)::date AS week_start
+            FROM transactions
+            WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?
+        """;
+
+        if (!showAll) sql += " AND type = ?";
         sql += " ORDER BY week_num, date";
 
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setObject(1, AuthService.getUserId());
-        stmt.setInt(2, weekYear);
-        if (!showAll) {
-            stmt.setString(3, type.toString());
-        }
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            stmt.setInt(2, year);
+            if (!showAll) stmt.setString(3, type.name());
 
-        ResultSet rs = stmt.executeQuery();
-        boolean anyWeekTransaction = false;
-        int currentWeek = -1;
+            try (ResultSet rs = stmt.executeQuery()) {
+                int currentWeek = -1;
 
-        while (rs.next()) {
-            int weekNum = rs.getInt("week_num");
-            LocalDate weekStart = rs.getDate("week_start").toLocalDate();
-            LocalDate weekEnd = weekStart.plusDays(6);
+                while (rs.next()) {
+                    int week = rs.getInt("week_num");
+                    LocalDate start = rs.getDate("week_start").toLocalDate();
+                    LocalDate end = start.plusDays(6);
 
-            if (weekNum != currentWeek) {
-                System.out.printf("\nWeek %d (%s - %s):%n", weekNum, weekStart, weekEnd);
-                currentWeek = weekNum;
-                anyWeekTransaction = true;
+                    if (week != currentWeek) {
+                        System.out.printf("%nWeek %d (%s - %s)%n", week, start, end);
+                        currentWeek = week;
+                    }
+
+                    printTransaction(rs);
+                }
             }
-
-            System.out.print("  ");
-            printTransaction(rs);
         }
-
-        if (!anyWeekTransaction) {
-            System.out.println("No transactions found for year " + weekYear + ".");
-        }
-
-        rs.close();
-        stmt.close();
     }
 
     private void executeDailyQuery(LocalDate date, boolean showAll, TransactionType type) throws Exception {
         String sql = "SELECT * FROM transactions WHERE user_id = ? AND date = ?";
-        if (!showAll) {
-            sql += " AND type = ?";
-        }
+        if (!showAll) sql += " AND type = ?";
         sql += " ORDER BY date";
 
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setObject(1, AuthService.getUserId());
-        stmt.setDate(2, java.sql.Date.valueOf(date));
-        if (!showAll) {
-            stmt.setString(3, type.toString());
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            stmt.setDate(2, java.sql.Date.valueOf(date));
+            if (!showAll) stmt.setString(3, type.name());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    printTransaction(rs);
+                }
+            }
         }
-
-        ResultSet rs = stmt.executeQuery();
-        boolean hasResults = false;
-
-        while (rs.next()) {
-            hasResults = true;
-            printTransaction(rs);
-        }
-
-        if (!hasResults) {
-            System.out.println("No transactions found for " + date + ".");
-        }
-
-        rs.close();
-        stmt.close();
     }
 
     private void printTransaction(ResultSet rs) throws Exception {
         UUID id = UUID.fromString(rs.getString("id"));
         UUID userId = UUID.fromString(rs.getString("user_id"));
-        String typeStr = rs.getString("type");
-        TransactionType type = TransactionType.valueOf(typeStr);
         double amount = rs.getDouble("amount");
         LocalDate date = rs.getDate("date").toLocalDate();
+        TransactionType type = TransactionType.valueOf(rs.getString("type"));
 
-        Transaction transaction = new Transaction(id, userId, amount, date, type);
-        System.out.println(transaction);
+        System.out.println(new Transaction(id, userId, amount, date, type));
     }
 }
