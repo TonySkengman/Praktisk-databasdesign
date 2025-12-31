@@ -36,12 +36,12 @@ public class Main {
             return;
         }
 
-        PostgreTransactionRepository transactionRepository;
         PostgresUserRepository userRepository;
+        PostgreTransactionRepository transactionRepository;
 
         try {
-            transactionRepository = new PostgreTransactionRepository(dbUrl, dbUser, dbPassword);
             userRepository = new PostgresUserRepository(dbUrl, dbUser, dbPassword);
+            transactionRepository = new PostgreTransactionRepository(dbUrl, dbUser, dbPassword);
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Failed to connect to the database. Exiting.");
