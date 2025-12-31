@@ -47,18 +47,24 @@ public class TerminalCommandService implements ICommandService {
 
     @Override
     public void executeCommand(String commandInput) {
+        Command commandToExecute = null;
+        for (Command command : commands) {
+            if (command.getName().equalsIgnoreCase(commandInput)) {
+                commandToExecute = command;
+                break;
+            }
+        }
+
+        if (commandToExecute == null) {
+            System.out.println("The command does not exist, try again!");
+            return;
+        }
+
         if (!publicCommands.contains(commandInput.toLowerCase()) && AuthService.getUserId() == null) {
             System.out.println("You must be logged in to use this command. Use 'login' first.");
             return;
         }
 
-        for (Command command : commands) {
-            if (command.getName().equalsIgnoreCase(commandInput)) {
-                command.execute();
-                return;
-            }
-        }
-
-        System.out.println("The command does not exist, try again!");
+        commandToExecute.execute();
     }
 }

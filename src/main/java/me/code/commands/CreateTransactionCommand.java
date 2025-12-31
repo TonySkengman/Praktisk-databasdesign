@@ -64,7 +64,7 @@ public class CreateTransactionCommand extends Command {
             }
         }
 
-        Transaction transaction = new Transaction(AuthService.getUserId(), amount, date, type); // ADD AuthService.getUserId()
+        Transaction transaction = new Transaction(AuthService.getUserId(), amount, date, type);
         try {
             transactionService.createTransaction(transaction);
             System.out.println("Transaction amount: " + transaction.getFormattedAmount() + " has been saved!");

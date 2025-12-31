@@ -79,12 +79,7 @@ public class ListTransactionsCommand extends Command {
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setObject(1, AuthService.getUserId());
             if (!showAll) stmt.setString(2, type.name());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    printTransaction(rs);
-                }
-            }
+            printResults(stmt);
         }
     }
 
@@ -97,12 +92,7 @@ public class ListTransactionsCommand extends Command {
             stmt.setObject(1, AuthService.getUserId());
             stmt.setInt(2, year);
             if (!showAll) stmt.setString(3, type.name());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    printTransaction(rs);
-                }
-            }
+            printResults(stmt);
         }
     }
 
@@ -116,48 +106,7 @@ public class ListTransactionsCommand extends Command {
             stmt.setInt(2, year);
             stmt.setInt(3, month);
             if (!showAll) stmt.setString(4, type.name());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    printTransaction(rs);
-                }
-            }
-        }
-    }
-
-    private void executeWeeklyQuery(int year, boolean showAll, TransactionType type) throws Exception {
-        String sql = """
-            SELECT *,
-                   EXTRACT(WEEK FROM date) AS week_num,
-                   date_trunc('week', date)::date AS week_start
-            FROM transactions
-            WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?
-        """;
-
-        if (!showAll) sql += " AND type = ?";
-        sql += " ORDER BY week_num, date";
-
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setObject(1, AuthService.getUserId());
-            stmt.setInt(2, year);
-            if (!showAll) stmt.setString(3, type.name());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                int currentWeek = -1;
-
-                while (rs.next()) {
-                    int week = rs.getInt("week_num");
-                    LocalDate start = rs.getDate("week_start").toLocalDate();
-                    LocalDate end = start.plusDays(6);
-
-                    if (week != currentWeek) {
-                        System.out.printf("%nWeek %d (%s - %s)%n", week, start, end);
-                        currentWeek = week;
-                    }
-
-                    printTransaction(rs);
-                }
-            }
+            printResults(stmt);
         }
     }
 
@@ -170,11 +119,60 @@ public class ListTransactionsCommand extends Command {
             stmt.setObject(1, AuthService.getUserId());
             stmt.setDate(2, java.sql.Date.valueOf(date));
             if (!showAll) stmt.setString(3, type.name());
+            printResults(stmt);
+        }
+    }
+
+    private void executeWeeklyQuery(int year, boolean showAll, TransactionType type) throws Exception {
+        String sql = """
+            SELECT *,
+                   EXTRACT(WEEK FROM date) AS week_num,
+                   date_trunc('week', date)::date AS week_start
+            FROM transactions
+            WHERE user_id = ? AND EXTRACT(YEAR FROM date) = ?
+        """;
+        if (!showAll) sql += " AND type = ?";
+        sql += " ORDER BY week_num, date";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setObject(1, AuthService.getUserId());
+            stmt.setInt(2, year);
+            if (!showAll) stmt.setString(3, type.name());
 
             try (ResultSet rs = stmt.executeQuery()) {
+                boolean hasResults = false;
+                int currentWeek = -1;
+
                 while (rs.next()) {
+                    hasResults = true;
+                    int week = rs.getInt("week_num");
+                    LocalDate start = rs.getDate("week_start").toLocalDate();
+                    LocalDate end = start.plusDays(6);
+
+                    if (week != currentWeek) {
+                        System.out.printf("%nWeek %d (%s - %s)%n", week, start, end);
+                        currentWeek = week;
+                    }
+
                     printTransaction(rs);
                 }
+
+                if (!hasResults) {
+                    System.out.println("No transactions found for the selected criteria.");
+                }
+            }
+        }
+    }
+
+    private void printResults(PreparedStatement stmt) throws Exception {
+        try (ResultSet rs = stmt.executeQuery()) {
+            boolean hasResults = false;
+            while (rs.next()) {
+                hasResults = true;
+                printTransaction(rs);
+            }
+            if (!hasResults) {
+                System.out.println("No transactions found for the selected criteria.");
             }
         }
     }

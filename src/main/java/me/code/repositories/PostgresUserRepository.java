@@ -1,6 +1,6 @@
 package me.code.repositories;
 
-import me.code.models.User; // CHANGE THIS LINE
+import me.code.models.User;
 
 import java.sql.*;
 import java.util.Optional;
@@ -39,7 +39,7 @@ public class PostgresUserRepository implements IUserRepository {
             String passwordHash = set.getString("password_hash");
             java.util.Date createdAt = set.getTimestamp("created_at");
 
-            User user = new User(id, username, passwordHash, createdAt); // REMOVE ArrayList parameter
+            User user = new User(id, username, passwordHash, createdAt);
             return Optional.of(user);
         }
     }
@@ -52,7 +52,7 @@ public class PostgresUserRepository implements IUserRepository {
             statement.setObject(1, user.getId());
             statement.setString(2, user.getUsername());
             statement.setString(3, user.getPasswordHash());
-            statement.setTimestamp(4, new Timestamp(user.getCreatedAt().getTime())); // FIX THIS
+            statement.setTimestamp(4, new Timestamp(user.getCreatedAt().getTime()));
 
             if (statement.executeUpdate() != 1) {
                 throw new SQLException("Failed to insert user");
