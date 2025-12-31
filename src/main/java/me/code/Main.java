@@ -14,6 +14,28 @@ public class Main {
         String dbUser = System.getenv("DATABASE_USER");
         String dbPassword = System.getenv("DATABASE_PASSWORD");
 
+        boolean missingEnvVars = false;
+        if (dbUrl == null || dbUrl.isBlank()) {
+            System.out.println("Missing env var 'DATABASE_URL'");
+            missingEnvVars = true;
+        }
+
+
+        if (dbUser == null || dbUser.isBlank()) {
+            System.out.println("Missing env var 'DATABASE_USER'");
+            missingEnvVars = true;
+        }
+
+
+        if (dbPassword == null || dbPassword.isBlank()) {
+            System.out.println("Missing env var 'DATABASE_PASSWORD'");
+            missingEnvVars = true;
+        }
+
+        if (missingEnvVars) {
+            return;
+        }
+
         PostgreTransactionRepository transactionRepository;
         PostgresUserRepository userRepository;
 
